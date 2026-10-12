@@ -17,7 +17,7 @@ public class HealthCheck {
     }
     @GetMapping("/new")
     public String new_func () {
-        return "aoo";
+        return "hha";
     }
 }
 
