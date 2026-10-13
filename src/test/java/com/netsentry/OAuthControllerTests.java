@@ -1,5 +1,6 @@
 package com.netsentry;
 
+import com.netsentry.DTOs.GoogleConnectionResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -68,9 +69,7 @@ class OAuthControllerTests {
                 """, MediaType.APPLICATION_JSON));
 
         assertThat(controller.testGoogleConnection(user, authorizedClient))
-                .containsExactlyInAnyOrderEntriesOf(Map.of(
-                        "connected", true, "userId", "test-user",
-                        "calendar", "My calendar", "eventsReturned", 1));
+                .isEqualTo(new GoogleConnectionResponse(true, "test-user", "My calendar", 1));
     }
 
     @Test
@@ -80,7 +79,7 @@ class OAuthControllerTests {
                 """, MediaType.APPLICATION_JSON));
 
         assertThat(controller.testGoogleConnection(user, authorizedClient))
-                .containsEntry("connected", true).containsEntry("eventsReturned", 0);
+                .isEqualTo(new GoogleConnectionResponse(true, "test-user", "Empty calendar", 0));
     }
 
     @Test

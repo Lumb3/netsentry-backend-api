@@ -1,14 +1,17 @@
 package com.netsentry;
 
+import com.netsentry.DTOs.ImageUploadResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import tools.jackson.databind.ObjectMapper;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -38,15 +41,20 @@ class UploadSecurityTests {
     @Autowired
     MockMvc mvc;
 
+    @Autowired
+    ObjectMapper json;
+
     @Test
     void anonymousUploadWithoutCsrfReachesControllerAndStoresFile() throws Exception {
         byte[] image = { (byte) 0x89, 'P', 'N', 'G' };
         var file = new MockMultipartFile("image", "calendar.png", "image/png", image);
 
-        String savedFilename = mvc.perform(multipart("/api/v1/upload-calendar").file(file))
+        String response = mvc.perform(multipart("/api/v1/upload-calendar").file(file))
                 .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andReturn().getResponse().getContentAsString();
 
+        String savedFilename = json.readValue(response, ImageUploadResponse.class).filename();
         assertThat(Files.readAllBytes(storageDirectory.resolve(savedFilename))).isEqualTo(image);
     }
 
@@ -56,7 +64,21 @@ class UploadSecurityTests {
 
         mvc.perform(multipart("/api/v1/upload-calendar").file(file))
                 .andExpect(status().isBadRequest())
-                .andExpect(content().string("File is empty"));
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(content().json("""
+                        {"status":400,"message":"File is empty"}
+                        """));
+    }
+
+    @Test
+    void nonImageUploadReturnsStructuredValidationError() throws Exception {
+        var file = new MockMultipartFile("image", "calendar.txt", "text/plain", new byte[] { 1 });
+
+        mvc.perform(multipart("/api/v1/upload-calendar").file(file))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().json("""
+                        {"status":400,"message":"Only image files are allowed"}
+                        """));
     }
 
     @Test

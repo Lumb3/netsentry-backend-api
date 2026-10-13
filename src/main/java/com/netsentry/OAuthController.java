@@ -1,5 +1,6 @@
 package com.netsentry;
 
+import com.netsentry.DTOs.GoogleConnectionResponse;
 import com.netsentry.models.AuthenticatorEndpoints;
 
 import org.springframework.http.HttpStatus;
@@ -14,8 +15,6 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.JsonNode;
 
-import java.util.Map;
-
 @RestController
 public class OAuthController implements AuthenticatorEndpoints {
 
@@ -28,7 +27,7 @@ public class OAuthController implements AuthenticatorEndpoints {
     }
 
     @Override
-    public Map<String, Object> testGoogleConnection(
+    public GoogleConnectionResponse testGoogleConnection(
             @AuthenticationPrincipal OidcUser user,
             @RegisteredOAuth2AuthorizedClient("google") OAuth2AuthorizedClient authorizedClient) {
         JsonNode calendarResponse;
@@ -57,10 +56,10 @@ public class OAuthController implements AuthenticatorEndpoints {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Google Calendar returned an invalid response.");
         }
 
-        return Map.of(
-                "connected", true,
-                "userId", user.getSubject(),
-                "calendar", calendarResponse.path("summary").asString(""),
-                "eventsReturned", calendarResponse.path("items").size());
+        return new GoogleConnectionResponse(
+                true,
+                user.getSubject(),
+                calendarResponse.path("summary").asString(""),
+                calendarResponse.path("items").size());
     }
 }
