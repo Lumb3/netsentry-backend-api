@@ -1,6 +1,6 @@
 package com.netsentry;
 
-import com.netsentry.models.ImageUploadApi;
+import com.netsentry.models.ImageUploadApiEndpoints;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -10,12 +10,12 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 
 @RestController
-public class ImageProcessor implements ImageUploadApi {
+public class ImageProcessorEndpoints implements ImageUploadApiEndpoints {
 
-    private static final Logger logger = LoggerFactory.getLogger(ImageProcessor.class);
+    private static final Logger logger = LoggerFactory.getLogger(ImageProcessorEndpoints.class);
     private final ImageLocalStorageService storageService;
 
-    public ImageProcessor(ImageLocalStorageService storageService) {
+    public ImageProcessorEndpoints(ImageLocalStorageService storageService) {
         this.storageService = storageService;
     }
 

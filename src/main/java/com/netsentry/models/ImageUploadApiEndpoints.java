@@ -8,8 +8,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 
 @RequestMapping("/api/v1")
-public interface ImageUploadApi {
+public interface ImageUploadApiEndpoints {
 
-    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/upload-calendar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     ResponseEntity<String> uploadImage(@RequestParam("image") MultipartFile file);
 }
