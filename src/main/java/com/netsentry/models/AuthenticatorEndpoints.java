@@ -14,4 +14,7 @@ public interface AuthenticatorEndpoints {
     GoogleConnectionResponse testGoogleConnection(
             @AuthenticationPrincipal OidcUser user,
             @RegisteredOAuth2AuthorizedClient("google") OAuth2AuthorizedClient authorizedClient);
+
+    @GetMapping("/successful-message")
+    String message();
 }

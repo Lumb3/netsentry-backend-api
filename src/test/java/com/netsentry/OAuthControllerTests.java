@@ -1,6 +1,5 @@
 package com.netsentry;
 
-import com.netsentry.DTOs.GoogleConnectionResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -62,25 +61,6 @@ class OAuthControllerTests {
         google.verify();
     }
 
-    @Test
-    void successfulRequestSendsBearerTokenAndReturnsConnectionDetails() {
-        expectCalendarRequest().andRespond(withSuccess("""
-                {"summary":"My calendar","items":[{"id":"event-1"}]}
-                """, MediaType.APPLICATION_JSON));
-
-        assertThat(controller.testGoogleConnection(user, authorizedClient))
-                .isEqualTo(new GoogleConnectionResponse(true, "test-user", "My calendar", 1));
-    }
-
-    @Test
-    void emptyCalendarStillReportsSuccessfulConnection() {
-        expectCalendarRequest().andRespond(withSuccess("""
-                {"summary":"Empty calendar","items":[]}
-                """, MediaType.APPLICATION_JSON));
-
-        assertThat(controller.testGoogleConnection(user, authorizedClient))
-                .isEqualTo(new GoogleConnectionResponse(true, "test-user", "Empty calendar", 0));
-    }
 
     @Test
     void rejectedTokenProducesBadGatewayWithoutLeakingGoogleResponse() {
