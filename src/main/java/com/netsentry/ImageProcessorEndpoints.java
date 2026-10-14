@@ -4,8 +4,12 @@ import com.netsentry.DTOs.ImageUploadResponse;
 import com.netsentry.models.ImageUploadApiEndpoints;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
+import org.springframework.ai.ollama.api.OllamaModel;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -14,16 +18,19 @@ import java.io.IOException;
 
 @RestController
 public class ImageProcessorEndpoints implements ImageUploadApiEndpoints {
-
-    private static final Logger logger = LoggerFactory.getLogger(ImageProcessorEndpoints.class);
+    ChatModel chatModel;
     private final ImageLocalStorageService storageService;
 
-    public ImageProcessorEndpoints(ImageLocalStorageService storageService) {
+    private static final Logger logger = LoggerFactory.getLogger(ImageProcessorEndpoints.class);
+
+
+    public ImageProcessorEndpoints(ImageLocalStorageService storageService, ChatModel chatModel) {
         this.storageService = storageService;
+        this.chatModel = chatModel;
     }
 
     @Override
-    public ResponseEntity<ImageUploadResponse> uploadImage(MultipartFile file) {
+    public ImageUploadResponse uploadImage(MultipartFile file) {
         logger.info("Received upload: {} ({} bytes)", file.getOriginalFilename(), file.getSize());
 
         if (file.isEmpty()) {
@@ -35,12 +42,24 @@ public class ImageProcessorEndpoints implements ImageUploadApiEndpoints {
         }
 
         try {
+            // Extract JSON response from the image
+            extractImage(file);
+
+            // Save the image locally on the computer
             String saved = storageService.save(file);
             logger.info("Saved {} as {}", file.getOriginalFilename(), saved);
-            return ResponseEntity.ok(new ImageUploadResponse(saved));
+            return new ImageUploadResponse(saved);
         } catch (IOException e) {
             logger.error("Failed to store upload locally", e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not save file");
         }
+    }
+
+    private void extractImage(MultipartFile file) {
+        ChatResponse response = chatModel.call(
+                new Prompt("Say hello")
+        );
+
+        logger.info("Response message: {}", response.getResult().getOutput().getText());
     }
 }
