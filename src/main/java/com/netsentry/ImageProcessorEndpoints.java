@@ -5,8 +5,8 @@ import com.netsentry.models.ImageUploadApiEndpoints;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -16,9 +16,11 @@ import org.springframework.ai.content.Media;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.util.MimeTypeUtils;
-import reactor.core.publisher.Flux;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.util.List;
+import java.util.Set;
 
 @RestController
 public class ImageProcessorEndpoints implements ImageUploadApiEndpoints {
@@ -27,27 +29,41 @@ public class ImageProcessorEndpoints implements ImageUploadApiEndpoints {
 
     private static final Logger logger = LoggerFactory.getLogger(ImageProcessorEndpoints.class);
 
+    private final String imagePrompt;
 
-    public ImageProcessorEndpoints(ImageLocalStorageService storageService, ChatModel chatModel) {
+    public ImageProcessorEndpoints(ImageLocalStorageService storageService, ChatModel chatModel, @Value("${calendar.extraction.prompt}") String imagePrompt) {
         this.storageService = storageService;
         this.chatModel = chatModel;
+        this.imagePrompt=imagePrompt;
+    }
+
+    private String checkContentType(MultipartFile file) {
+        if (file.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "File is empty"
+            );
+        }
+
+        String contentType = file.getContentType();
+
+        if (contentType == null ||
+                !Set.of("image/png", "image/jpeg").contains(contentType)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Unsupported image format"
+            );
+        }
+
+        return contentType;
     }
 
     @Override
     public ImageUploadResponse uploadImage(MultipartFile file) {
         logger.info("Received upload: {} ({} bytes)", file.getOriginalFilename(), file.getSize());
 
-        if (file.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is empty");
-        }
-        String contentType = file.getContentType();
-        if (contentType == null || !contentType.startsWith("image/")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only image files are allowed");
-        }
-
         try {
+            String contentType = checkContentType(file);
             // Extract JSON response from the image
-            extractImage(file);
+            String extractedResponse = extractImage(file, contentType);
 
             // Save the image locally on the computer
             String saved = storageService.save(file);
@@ -60,36 +76,48 @@ public class ImageProcessorEndpoints implements ImageUploadApiEndpoints {
     }
 
 
-    private String extractImage(MultipartFile file) throws IOException {
+
+    private String extractImage(
+            MultipartFile file,
+            String contentType
+    ) throws IOException {
 
         var imageResource = new ByteArrayResource(file.getBytes());
 
-
         var userMessage = UserMessage.builder()
-                .text("Tell me what you see in this image. Just give a single sentence.")
-                .media( new Media(MimeTypeUtils.parseMimeType(file.getContentType()), imageResource))
+                .text(imagePrompt)
+                .media(new Media(
+                        MimeTypeUtils.parseMimeType(contentType),
+                        imageResource
+                ))
                 .build();
 
-        long start = System.currentTimeMillis(); // Record the start time of the generation
-        StringBuilder fullResponse = new StringBuilder();
+        long start = System.currentTimeMillis();
 
         logger.info("Sending image to Ollama...");
 
-        Flux<ChatResponse> stream = this.chatModel.stream(new Prompt(userMessage));
 
-        stream.subscribe(response -> {
-            String chunk = response.getResult().getOutput().getText();
+        List<String> chunks = chatModel.stream(new Prompt(userMessage))
+                .map(response -> {
+                    if (response.getResult() == null ||
+                            response.getResult() == null) {
+                        return "";
+                    }
 
-            if (chunk != null && !chunk.isEmpty()) {
-                fullResponse.append(chunk);
-               logger.info("[Each Response] {}", chunk);
-            }
-        });
-        stream.doOnComplete(() -> logger.info("Ollama generation has completed"))
-                .doOnError(error -> logger.error("Ollama generation failed", error)).blockLast();
+                    String text = response.getResult()
+                            .getOutput()
+                            .getText();
 
-        long elapsed = System.currentTimeMillis() - start;
-        String content = fullResponse.toString();
+                    return text == null ? "" : text;
+                })
+                .filter(chunk -> !chunk.isEmpty())
+                .doOnNext(chunk -> logger.debug("Received Ollama chunk"))
+                .doOnComplete(() -> logger.info("Ollama generation completed"))
+                .doOnError(error -> logger.error("Ollama generation failed", error))
+                .collectList()
+                .block(Duration.ofMinutes(5));
+
+        String content = chunks == null ? "" : String.join("", chunks);
 
         if (content.isBlank()) {
             throw new ResponseStatusException(
@@ -98,9 +126,10 @@ public class ImageProcessorEndpoints implements ImageUploadApiEndpoints {
             );
         }
 
-        logger.info("Ollama finished in {} ms", elapsed);
-        logger.info("Full response: {}", content);
+        long elapsed = System.currentTimeMillis() - start;
 
+        logger.info("Ollama finished in {} ms", elapsed);
+        logger.info("Final Ollama response {}", content);
         return content;
     }
 
