@@ -17,12 +17,14 @@ I'm integrating Google OpenID Connect authentication with Ollama's `qwen3-vl:4b`
 
 Java, Spring Boot, Spring Security, Spring AI, Ollama (`qwen3-vl:4b`), and Google Calendar API.
 
+
 ## Google authentication flow
 
 Spring Security handles the OAuth 2.0 authorization-code flow and Google's callback. The backend then uses the authorized access token to call Google Calendar.
 
-![Google OAuth 2.0 authorization-code flow](docs/google-oauth-flow.png)
-
+<p align="center">
+  <img src="docs/google-oauth-flow.png" alt="Google OAuth 2.0 flow" width="450">
+</p>
 
 ## Success Criteria
 
@@ -30,8 +32,12 @@ The goal is to convert an uploaded schedule image into Google Calendar events au
 
 ### Input: Course Schedule
 
-![Original Schedule](docs/initial-calendar-image.png)
+<p align="center">
+  <img src="docs/initial-calendar-image.png" alt="Original Course Schedule" width="400">
+</p>
 
 ### Expected Output: Google Calendar
 
-![Google Calendar](docs/google-calendar-image.png)
+<p align="center">
+  <img src="docs/google-calendar-image.png" alt="Google Calendar" width="400">
+</p>
