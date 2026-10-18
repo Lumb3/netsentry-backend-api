@@ -26,7 +26,7 @@ public class SecurityConfig {
                 )
                 // The public upload API accepts multipart requests without a session CSRF token.
                 .csrf(csrf -> csrf.ignoringRequestMatchers(uploadRequest))
-                .oauth2Login(oauth -> oauth.defaultSuccessUrl("/api/v1/successful-message", true))
+                .oauth2Login(oauth -> oauth.defaultSuccessUrl("/api/v1/test/google", true))
                 .oauth2Client(Customizer.withDefaults());
 
         return http.build();
