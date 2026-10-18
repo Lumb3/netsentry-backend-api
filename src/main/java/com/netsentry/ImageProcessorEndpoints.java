@@ -1,11 +1,14 @@
 package com.netsentry;
 
+import com.netsentry.DTOs.ImageExtractionJsonResponse;
 import com.netsentry.DTOs.ImageUploadResponse;
 import com.netsentry.models.ImageUploadApiEndpoints;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.converter.BeanOutputConverter;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,7 +19,6 @@ import org.springframework.ai.content.Media;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.util.MimeTypeUtils;
-
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
@@ -63,12 +65,12 @@ public class ImageProcessorEndpoints implements ImageUploadApiEndpoints {
         try {
             String contentType = checkContentType(file);
             // Extract JSON response from the image
-            String extractedResponse = extractImage(file, contentType);
+            ImageExtractionJsonResponse extractedResponse = extractImage(file, contentType);
 
             // Save the image locally on the computer
-            String saved = storageService.save(file);
-            logger.info("Saved {} as {}", file.getOriginalFilename(), saved);
-            return new ImageUploadResponse(saved);
+            String savedFileName = this.storageService.save(file);
+            logger.info("Saved {} as {}", file.getOriginalFilename(), savedFileName);
+            return new ImageUploadResponse(savedFileName, extractedResponse);
         } catch (IOException e) {
             logger.error("Failed to store upload locally", e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not save file");
@@ -77,7 +79,7 @@ public class ImageProcessorEndpoints implements ImageUploadApiEndpoints {
 
 
 
-    private String extractImage(
+    private ImageExtractionJsonResponse extractImage(
             MultipartFile file,
             String contentType
     ) throws IOException {
@@ -92,12 +94,17 @@ public class ImageProcessorEndpoints implements ImageUploadApiEndpoints {
                 ))
                 .build();
 
+        var converter = new BeanOutputConverter<>(ImageExtractionJsonResponse.class);
+        // Keep application.properties configuration
+        var defaults = (OllamaChatOptions) chatModel.getOptions();
+        // default.mutate() preserves the existing configuration and added only the JSON outputSchema
+        var options = defaults.mutate().outputSchema(converter.getJsonSchema()).build();
         long start = System.currentTimeMillis();
 
         logger.info("Sending image to Ollama...");
 
 
-        List<String> chunks = chatModel.stream(new Prompt(userMessage))
+        List<String> chunks = chatModel.stream(new Prompt(userMessage, options))
                 .map(response -> {
                     if (response.getResult() == null ||
                             response.getResult() == null) {
@@ -117,20 +124,29 @@ public class ImageProcessorEndpoints implements ImageUploadApiEndpoints {
                 .collectList()
                 .block(Duration.ofMinutes(5));
 
-        String content = chunks == null ? "" : String.join("", chunks);
+        String jsonCalendarInfo = chunks == null ? "" : String.join("", chunks);
 
-        if (content.isBlank()) {
+        if (jsonCalendarInfo.isBlank()) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
                     "Ollama returned an empty response"
             );
         }
+        try {
+            // This will parse the string. If it's invalid JSON, it throws an exception.
+            ImageExtractionJsonResponse result = converter.convert(jsonCalendarInfo);
+            long elapsed = System.currentTimeMillis() - start;
 
-        long elapsed = System.currentTimeMillis() - start;
+            logger.info("Ollama finished in {} ms", elapsed);
+            logger.info("Image extraction completed");
 
-        logger.info("Ollama finished in {} ms", elapsed);
-        logger.info("Final Ollama response {}", content);
-        return content;
+            return result;
+        } catch (RuntimeException e) {
+            logger.error("Failed to parse Ollama JSON response", e);
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Ollama returned an invalid JSON structure: " + e.getMessage()
+            );
+        }
     }
-
 }
